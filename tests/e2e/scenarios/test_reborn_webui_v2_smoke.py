@@ -171,10 +171,10 @@ async def _install_fake_v2_event_source(page) -> None:
             });
             stream.dispatchEvent(event);
           };
-          window.__failLatestV2Sse = () => {
+          window.__failLatestV2Sse = (readyState = 2) => {
             const stream = currentStream();
-            stream.readyState = 2;
-            if (activeStream === stream) activeStream = null;
+            stream.readyState = readyState;
+            if (readyState === 2 && activeStream === stream) activeStream = null;
             if (typeof stream.onerror !== "function") {
               throw new Error("EventSource has no error handler");
             }
@@ -588,10 +588,10 @@ async def test_reborn_v2_composer_accepts_draft_while_run_is_processing(reborn_v
     await expect(reborn_v2_page.locator(SEL_V2["msg_user"])).to_have_count(1, timeout=1000)
 
 
-async def test_reborn_v2_disconnected_run_stops_typing_and_shows_connection_error(
+async def test_reborn_v2_disconnected_run_shows_status_and_stops_typing(
     reborn_v2_server, reborn_v2_browser
 ) -> None:
-    """A disconnected active run shows connection-loss copy instead of spinning forever."""
+    """A disconnected active run shows transport status and stops spinning."""
     thread_id = "thread-disconnected-run"
     context = await reborn_v2_browser.new_context(viewport={"width": 1280, "height": 720})
     page = await context.new_page()
@@ -660,12 +660,49 @@ async def test_reborn_v2_disconnected_run_stops_typing_and_shows_connection_erro
         await page.goto(f"{reborn_v2_server}/v2/chat/{thread_id}?token={REBORN_V2_AUTH_TOKEN}")
         composer = page.locator(SEL_V2["chat_composer"])
         await expect(composer).to_be_visible(timeout=15000)
+        connection_status = page.locator(SEL_V2["connection_status"])
+
+        await context.set_offline(True)
+        await expect(connection_status).to_have_text("Reconnecting...", timeout=5000)
+        await expect(connection_status).to_have_css("position", "static")
+        assert await connection_status.evaluate("node => Boolean(node.closest('header'))")
+        await expect(connection_status).to_be_in_viewport()
+
+        await page.set_viewport_size({"width": 390, "height": 844})
+        connection_status_toggle = page.locator(SEL_V2["connection_status_toggle"])
+        connection_status_label = page.locator(SEL_V2["connection_status_label"])
+        disclosure_id = await connection_status_label.get_attribute("id")
+        assert disclosure_id
+        await expect(connection_status_label).to_be_hidden()
+        await expect(connection_status_label).to_have_attribute("aria-hidden", "true")
+        await expect(connection_status_toggle).to_have_attribute("aria-expanded", "false")
+        await expect(connection_status_toggle).to_have_attribute("aria-controls", disclosure_id)
+        await expect(connection_status_toggle).to_be_in_viewport()
+
+        await connection_status_toggle.click()
+        await expect(connection_status_toggle).to_have_attribute("aria-expanded", "true")
+        await expect(connection_status_label).to_have_attribute("aria-hidden", "false")
+        await expect(connection_status_label).to_be_visible()
+        await expect(connection_status_label).to_have_text("Reconnecting...")
+        await expect(connection_status_label).to_have_css("position", "absolute")
+        await expect(connection_status_toggle).to_be_in_viewport()
+        await expect(connection_status_label).to_be_in_viewport()
+        await expect(page.locator(SEL_V2["header_logs_link"])).to_be_visible()
+        await expect(page.locator(SEL_V2["header_docs_link"])).to_be_visible()
+
+        await page.set_viewport_size({"width": 1280, "height": 720})
+        await context.set_offline(False)
+        await expect(connection_status).to_have_count(0, timeout=5000)
 
         await composer.fill("summarize 3 X/Twitter posts")
         await composer.press("Enter")
         await expect(page.locator(SEL_V2["typing_indicator"])).to_be_visible(timeout=5000)
 
-        await page.evaluate("() => window.__failLatestV2Sse()")
+        await page.evaluate("() => window.__failLatestV2Sse(0)")
+        await expect(connection_status).to_have_text("Reconnecting...", timeout=5000)
+
+        await page.evaluate("() => window.__failLatestV2Sse(2)")
+        await expect(connection_status).to_have_text("Disconnected", timeout=5000)
 
         await expect(page.locator(SEL_V2["typing_indicator"])).to_have_count(0, timeout=5000)
         await expect(page.locator(SEL_V2["msg_error"]).last).to_contain_text(
