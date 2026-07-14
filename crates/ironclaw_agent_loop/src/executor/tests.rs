@@ -3075,20 +3075,19 @@ async fn explanation_model_error_degrades_to_original_failed_exit() {
     assert!(host.finalized_assistant_messages().is_empty());
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn model_error_abort_skips_explanation_and_carries_partial_refs() {
+    // Availability-class model errors retry on the deep availability budget
+    // before aborting; paused time fast-forwards the backoff sleeps.
+    let abort_call_count = crate::strategies::DefaultRecoveryStrategy::default()
+        .max_model_availability_attempts as usize
+        + 1;
     let script = ScenarioScript {
-        model_responses: VecDeque::from([
-            ScriptedModelResponse::Error {
+        model_responses: (0..abort_call_count)
+            .map(|_| ScriptedModelResponse::Error {
                 kind: AgentLoopHostErrorKind::Internal,
-            },
-            ScriptedModelResponse::Error {
-                kind: AgentLoopHostErrorKind::Internal,
-            },
-            ScriptedModelResponse::Error {
-                kind: AgentLoopHostErrorKind::Internal,
-            },
-        ]),
+            })
+            .collect(),
         capability_outcomes: VecDeque::new(),
         single_call_retry_outcomes: VecDeque::new(),
         pending_inputs: VecDeque::new(),
@@ -3116,9 +3115,68 @@ async fn model_error_abort_skips_explanation_and_carries_partial_refs() {
             .iter()
             .filter(|call| matches!(call, MockHostCall::StreamModel))
             .count(),
-        3
+        abort_call_count
     );
     assert!(host.finalized_assistant_messages().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn availability_budget_above_old_executor_guard_reaches_strategy_abort() {
+    // Regression pin: the model stage's retry guard is derived from the
+    // composed recovery strategy, not a hard-coded executor constant. A
+    // configured availability budget larger than the old `MAX_MODEL_RETRIES`
+    // (16) must still reach the strategy's own Abort — with its failure
+    // category and diagnostics — instead of falling through the loop to a
+    // diagnostic-free generic ModelError exit.
+    let attempts = 20u32;
+    let family = crate::families::default_with_overrides(
+        crate::families::FamilyOverrides::default().set_model_availability_attempts(attempts),
+    );
+    let diagnostic_ref = LoopDiagnosticRef::new("diag:model-outage").expect("valid");
+    // Exactly attempts+1 scripted failures: the final one is the call where
+    // the strategy's budget is exhausted and it aborts. Any extra call would
+    // hit the mock's script-exhausted Internal fallback and change the
+    // observed failure category.
+    let host = MockHost::new(Vec::new()).with_model_errors(
+        (0..=attempts)
+            .map(|_| {
+                AgentLoopHostError::new(AgentLoopHostErrorKind::Unavailable, "model unavailable")
+                    .with_diagnostic_ref(diagnostic_ref.clone())
+            })
+            .collect(),
+    );
+    let executor = CanonicalAgentLoopExecutor;
+    let state = LoopExecutionState::initial_for_run(host.run_context());
+
+    let exit = executor
+        .execute_family(&family, &host, state)
+        .await
+        .expect("execute");
+
+    match exit {
+        LoopExit::Failed(failed) => {
+            assert_eq!(failed.reason_kind, LoopFailureKind::ModelError);
+            assert_eq!(
+                failed
+                    .safe_summary
+                    .as_ref()
+                    .map(|summary| summary.category()),
+                Some("model_unavailable"),
+                "abort must carry the strategy's failure category"
+            );
+            assert_eq!(
+                failed.diagnostic_ref,
+                Some(diagnostic_ref),
+                "abort must carry the model error's diagnostic ref"
+            );
+        }
+        other => panic!("expected failed exit, got {other:?}"),
+    }
+    assert_eq!(
+        host.model_requests().len(),
+        (attempts + 1) as usize,
+        "the loop must allow exactly the configured availability budget"
+    );
 }
 
 #[tokio::test]
