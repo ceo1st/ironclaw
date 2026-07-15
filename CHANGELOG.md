@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- *(reborn)* automations and `trigger_list` now surface why a scheduled trigger is currently held (approval/auth/in-progress) and how many scheduled occurrences elapsed while held ([#5886](https://github.com/nearai/ironclaw/issues/5886)).
+
 ### Fixed
 
 - *(reborn)* recover the filesystem resource governor after transient libSQL writer contention without bypassing durable accounting, reject stale authority writes during recovery, and distinguish accounting outages from provider budget failures.
