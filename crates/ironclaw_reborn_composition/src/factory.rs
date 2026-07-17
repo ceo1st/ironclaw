@@ -68,7 +68,8 @@ use ironclaw_host_api::{
 use ironclaw_host_api::{HostApiError, MountAlias, MountGrant};
 use ironclaw_host_runtime::{
     CapabilitySurfaceVersion, FirstPartyCapabilityRegistry, HostRuntimeHttpEgressPort,
-    HostRuntimeServices, LocalHostProcessPort, ProductAuthProviderRuntimePorts, TriggerCreateHook,
+    HostRuntimeServices, LocalHostProcessPort, PostEditCheckConfig,
+    ProductAuthProviderRuntimePorts, TriggerCreateHook,
     builtin_first_party_handlers_with_trigger_create_hook, builtin_first_party_package,
 };
 #[cfg(any(feature = "libsql", feature = "postgres"))]
@@ -348,6 +349,29 @@ where
         RebornRuntimeProcessBinding::TenantSandbox { process_port } => {
             services.with_tenant_sandbox_process_port(process_port)
         }
+    }
+}
+
+/// Composition-layer optional-env seam for the coding post-edit check
+/// (`IRONCLAW_POST_EDIT_CHECK` / `IRONCLAW_POST_EDIT_CHECK_TIMEOUT_SECS`).
+/// Parsing lives in the module-owned `PostEditCheckConfig::from_env`; this
+/// only threads the resolved config into host runtime services. The feature
+/// stays off when the command env is unset or blank.
+fn apply_post_edit_check_from_env<F, G, S, R>(
+    services: HostRuntimeServices<F, G, S, R>,
+) -> Result<HostRuntimeServices<F, G, S, R>, RebornBuildError>
+where
+    F: ironclaw_filesystem::RootFilesystem + 'static,
+    G: ironclaw_resources::ResourceGovernor + 'static,
+    S: ironclaw_processes::ProcessStore + 'static,
+    R: ironclaw_processes::ProcessResultStore + 'static,
+{
+    match PostEditCheckConfig::from_env() {
+        Ok(Some(post_edit_check)) => Ok(services.with_post_edit_check(post_edit_check)),
+        Ok(None) => Ok(services),
+        Err(error) => Err(RebornBuildError::InvalidConfig {
+            reason: error.to_string(),
+        }),
     }
 }
 
@@ -1715,6 +1739,7 @@ async fn build_local_runtime(input: RebornBuildInput) -> Result<RebornServices, 
         services = services.with_runtime_process_port(Arc::new(process_port));
     }
     services = apply_runtime_process_binding(services, runtime_process_binding);
+    services = apply_post_edit_check_from_env(services)?;
     services = attach_hosted_mcp_runtime(services)?;
     let product_auth_runtime_ports = require_product_auth_runtime_ports(&services)?;
     let provider_composition = compose_provider_client(
@@ -4754,6 +4779,19 @@ where
         }
     };
     let services = apply_production_runtime_process_binding(services, process_binding);
+    // Wire the operator post-edit check in production too (off unless
+    // IRONCLAW_POST_EDIT_CHECK is set). It runs isolated in the tenant sandbox
+    // per the runtime process binding applied above; the resolver routes it to
+    // the tenant-sandbox process port rather than the provider host.
+    let services = match PostEditCheckConfig::from_env() {
+        Ok(Some(config)) => services.with_post_edit_check(config),
+        Ok(None) => services,
+        Err(error) => {
+            return Err(crate::RebornCompositionError::InvalidConfig {
+                reason: error.to_string(),
+            });
+        }
+    };
 
     let services = services
         .try_with_host_http_egress_with_body_store(
@@ -5084,6 +5122,10 @@ where
         services,
         production_wiring.runtime_process_binding,
     );
+    // Wire the operator post-edit check in production too (off unless
+    // IRONCLAW_POST_EDIT_CHECK is set); it runs isolated in the tenant sandbox
+    // per the process binding applied above.
+    let services = apply_post_edit_check_from_env(services)?;
     let security_audit_sink = services.security_audit_sink();
 
     let turn_coordinator: Arc<dyn ironclaw_turns::TurnCoordinator> =
