@@ -1361,6 +1361,10 @@ registerPack("ko", {
 
 registerPack("ko", {
   "app.checkingSession": "세션 확인 중...",
+  "app.sessionCheckFailedTitle": "세션을 확인할 수 없습니다",
+  "app.sessionCheckFailedDescription":
+    "현재 세션을 확인할 수 없습니다. 로그인 정보는 계속 저장되어 있습니다. 잠시 후 다시 시도하세요.",
+  "app.retrySession": "다시 시도",
   "common.close": "닫기",
   "common.download": "다운로드",
   "common.copy": "복사",

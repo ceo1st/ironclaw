@@ -1361,6 +1361,10 @@ registerPack("fr", {
 
 registerPack("fr", {
   "app.checkingSession": "Vérification de la session...",
+  "app.sessionCheckFailedTitle": "Impossible de vérifier votre session",
+  "app.sessionCheckFailedDescription":
+    "Impossible de vérifier votre session pour le moment. Vos informations de connexion restent enregistrées. Réessayez dans quelques instants.",
+  "app.retrySession": "Réessayer",
   "common.close": "Fermer",
   "common.download": "Télécharger",
   "common.copy": "Copier",

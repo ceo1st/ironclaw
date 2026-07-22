@@ -1361,6 +1361,10 @@ registerPack("uk", {
 
 registerPack("uk", {
   "app.checkingSession": "Перевірка сеансу...",
+  "app.sessionCheckFailedTitle": "Не вдалося перевірити сеанс",
+  "app.sessionCheckFailedDescription":
+    "Зараз не вдалося перевірити ваш сеанс. Дані для входу залишаються збереженими. Повторіть спробу трохи пізніше.",
+  "app.retrySession": "Повторити",
   "common.close": "Закрити",
   "common.download": "Завантажити",
   "common.copy": "Копіювати",

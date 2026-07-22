@@ -1361,6 +1361,10 @@ registerPack("hi", {
 
 registerPack("hi", {
   "app.checkingSession": "सत्र जांचा जा रहा है...",
+  "app.sessionCheckFailedTitle": "आपके सत्र की पुष्टि नहीं हो सकी",
+  "app.sessionCheckFailedDescription":
+    "अभी आपके सत्र की पुष्टि नहीं हो सकी। आपकी साइन-इन जानकारी अभी भी सहेजी हुई है। थोड़ी देर बाद फिर कोशिश करें।",
+  "app.retrySession": "फिर कोशिश करें",
   "common.close": "बंद करें",
   "common.download": "डाउनलोड",
   "common.copy": "कॉपी",

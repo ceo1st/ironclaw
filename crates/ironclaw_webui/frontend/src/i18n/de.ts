@@ -1361,6 +1361,10 @@ registerPack("de", {
 
 registerPack("de", {
   "app.checkingSession": "Sitzung wird geprüft...",
+  "app.sessionCheckFailedTitle": "Sitzung konnte nicht überprüft werden",
+  "app.sessionCheckFailedDescription":
+    "Ihre Sitzung konnte gerade nicht überprüft werden. Ihre Anmeldung bleibt gespeichert. Versuchen Sie es in Kürze erneut.",
+  "app.retrySession": "Erneut versuchen",
   "common.close": "Schließen",
   "common.download": "Herunterladen",
   "common.copy": "Kopieren",

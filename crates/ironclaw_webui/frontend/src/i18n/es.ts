@@ -1362,6 +1362,10 @@ registerPack("es", {
 
 registerPack("es", {
   "app.checkingSession": "Comprobando sesión...",
+  "app.sessionCheckFailedTitle": "No se pudo verificar tu sesión",
+  "app.sessionCheckFailedDescription":
+    "No pudimos verificar tu sesión en este momento. Tu inicio de sesión sigue guardado. Inténtalo de nuevo en unos instantes.",
+  "app.retrySession": "Reintentar",
   "common.close": "Cerrar",
   "common.download": "Descargar",
   "common.copy": "Copiar",
